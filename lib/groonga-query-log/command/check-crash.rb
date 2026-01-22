@@ -14,6 +14,7 @@
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
+require "logger"
 require "optparse"
 
 require "groonga-query-log"
@@ -23,7 +24,7 @@ module GroongaQueryLog
   module Command
     class CheckCrash < CommandLine
       def initialize
-        @debug = false
+        @output_level = :info
         setup_options
       end
 
@@ -36,7 +37,7 @@ module GroongaQueryLog
         end
 
         if log_paths.empty?
-          puts @option_parser.help
+          puts(@option_parser.help)
           return false
         end
 
@@ -53,13 +54,18 @@ module GroongaQueryLog
 
       private
       def setup_options
+        available_output_levels = [:info, :debug]
         @options = {}
 
         @option_parser = OptionParser.new do |parser|
           parser.version = VERSION
           parser.banner += " LOG1 ..."
-          parser.on("--debug", "Output detailed information (#{@debug})") do |boolean|
-            @debug = boolean
+          parser.on("--output-level=LEVEL",
+                    available_output_levels,
+                    "Specify the output level. [#{@output_level}]",
+                    "Specifying 'debug' displays detailed information.",
+                    "(#{available_output_levels.join(", ")})") do |output_level|
+            @output_level = output_level
           end
         end
       end
@@ -75,7 +81,8 @@ module GroongaQueryLog
       end
 
       def check(log_paths)
-        checker = Checker.new(log_paths, debug: @debug)
+        checker = Checker.new(log_paths,
+                              output_level: @output_level)
         checker.check
       end
 
@@ -120,9 +127,14 @@ module GroongaQueryLog
       end
 
       class Checker
-        def initialize(log_paths, debug: false)
+        def initialize(log_paths, output_level: :info)
           split_log_paths(log_paths)
-          @debug = debug
+          formatter = proc do |severity, datetime, progname, message|
+            "#{message}\n"
+          end
+          @logger = Logger.new(STDOUT,
+                               formatter: formatter,
+                               level: Logger::Severity.const_get(output_level.upcase))
         end
 
         def check
@@ -137,51 +149,51 @@ module GroongaQueryLog
             need_query_log_parsing = true
             if process.successfully_finished?
               need_query_log_parsing = false
-              debug([:process,
-                     :success,
-                     process.version,
-                     process.start_time.iso8601,
-                     process.end_time.iso8601,
-                     process.pid,
-                     process.start_log_path,
-                     process.end_log_path].to_s)
+              @logger.debug([:process,
+                             :success,
+                             process.version,
+                             process.start_time.iso8601,
+                             process.end_time.iso8601,
+                             process.pid,
+                             process.start_log_path,
+                             process.end_log_path].to_s)
             elsif process.crashed?
-              debug([:process,
-                     :crashed,
-                     process.version,
-                     process.start_time.iso8601,
-                     process.end_time.iso8601,
-                     process.pid,
-                     process.start_log_path,
-                     process.end_log_path].to_s)
+              @logger.debug([:process,
+                             :crashed,
+                             process.version,
+                             process.start_time.iso8601,
+                             process.end_time.iso8601,
+                             process.pid,
+                             process.start_log_path,
+                             process.end_log_path].to_s)
               summary[:crashed] = true
             else
-              debug([:process,
-                     :unfinished,
-                     process.version,
-                     process.start_time.iso8601,
-                     process.pid,
-                     process.start_log_path].to_s)
+              @logger.debug([:process,
+                             :unfinished,
+                             process.version,
+                             process.start_time.iso8601,
+                             process.pid,
+                             process.start_log_path].to_s)
             end
 
             unless process.n_leaks.zero?
-              debug([:leak,
-                     process.version,
-                     process.n_leaks,
-                     process.end_time.iso8601,
-                     process.pid,
-                     process.end_log_path].to_s)
+              @logger.debug([:leak,
+                             process.version,
+                             process.n_leaks,
+                             process.end_time.iso8601,
+                             process.pid,
+                             process.end_log_path].to_s)
               summary[:leak] = true
             end
 
             unless process.important_entries.empty?
-              info("Important entries:")
+              @logger.info("Important entries:")
               process.important_entries.each_with_index do |entry, i|
-                info("#{entry.timestamp.iso8601}: " +
-                     "#{entry.pid}: " +
-                     "#{entry.thread_id}: " +
-                     "#{entry.log_level}: " +
-                     "#{entry.message}")
+                @logger.info("#{entry.timestamp.iso8601}: " +
+                             "#{entry.pid}: " +
+                             "#{entry.thread_id}: " +
+                             "#{entry.log_level}: " +
+                             "#{entry.message}")
               end
             end
 
@@ -203,28 +215,28 @@ module GroongaQueryLog
               statistic.start_time < start_time
             end
             unless target_parsing_statistics.empty?
-              info("Running queries:")
+              @logger.info("Running queries:")
               target_parsing_statistics.each do |statistic|
-                info("#{statistic.start_time.iso8601}:")
-                info(statistic.command.to_command_format(pretty_print: true))
+                @logger.info("#{statistic.start_time.iso8601}:")
+                @logger.info(statistic.command.to_command_format(pretty_print: true))
               end
               summary[:running_queries] = true
             end
             unless @unflushed_statistics.empty?
-              info("Unflushed commands in " +
-                   "#{start_time.iso8601}/#{end_time.iso8601}")
+              @logger.info("Unflushed commands in " +
+                           "#{start_time.iso8601}/#{end_time.iso8601}")
               @unflushed_statistics.each do |statistic|
-                info("#{statistic.start_time.iso8601}: #{statistic.raw_command}")
+                @logger.info("#{statistic.start_time.iso8601}: #{statistic.raw_command}")
               end
               summary[:unfinished] = true
             end
           end
-          info("Summary:")
-          info(summary.map {|k, v| "#{k}:#{v ? "yes" : "no"}" }.join(", "))
+          @logger.info("Summary:")
+          @logger.info(summary.map {|k, v| "#{k}:#{v ? "yes" : "no"}" }.join(", "))
           if summary.value?(true)
-            info("NG: Please check the display and logs.")
+            @logger.info("NG: Please check the display and logs.")
           else
-            info("OK: no problems.")
+            @logger.info("OK: no problems.")
           end
         end
 
@@ -326,15 +338,6 @@ module GroongaQueryLog
             end
           end
           @flushed = @unflushed_statistics.empty?
-        end
-
-        def debug(message)
-          return unless @debug
-          puts message
-        end
-
-        def info(message)
-          puts message
         end
       end
 
