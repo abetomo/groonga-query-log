@@ -326,8 +326,16 @@ module GroongaQueryLog
               @unflushed_statistics.reject! do |statistic|
                 case statistic.command.command_name
                 when /_create\z/
+                  # column_create
+                  # table_create
                   true # TODO: Need io_flush for the target
                 when /_remove\z/, /_rename\z/
+                  # column_remove
+                  # logical_table_remove
+                  # object_remove
+                  # table_remove
+                  # column_rename
+                  # table_rename
                   true
                 when "plugin_register", "plugin_unregister"
                   true

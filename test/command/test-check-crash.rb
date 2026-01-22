@@ -60,7 +60,7 @@ OK: no problems.
 OUTPUT
       assert_equal([true, output],
                    run_command(fixture_path("process", "normal.log"),
-                               fixture_path("query", "load-flushed", "only-opened.log")))
+                               fixture_path("query", "load", "flushed", "only-opened.log")))
     end
 
     # todo: add other tests
@@ -91,7 +91,7 @@ OUTPUT
 
       assert_equal([true, output],
                    run_command(fixture_path("process", "normal.log"),
-                               fixture_path("query", "load-flushed", "only-opened.log")))
+                               fixture_path("query", "load", "flushed", "only-opened.log")))
     end
 
     def test_leak
@@ -120,7 +120,36 @@ OUTPUT
       ].join("\n") + "\n"
       assert_equal([true, output],
                    run_command(fixture_path("process", "leak.log"),
-                               fixture_path("query", "load-flushed", "only-opened.log")))
+                               fixture_path("query", "load", "flushed", "only-opened.log")))
+    end
+
+    def test_load_unfinished
+      output = [
+        [
+          :process,
+          :crashed,
+          "99.9.9",
+          "2000-01-01T00:00:00+09:00",
+          "2000-01-01T12:00:00+09:00",
+          1,
+          fixture_path("process", "crash.log"),
+          fixture_path("process", "crash.log"),
+        ].to_s,
+        "Important entries:",
+        "2000-01-01T12:00:00+09:00: 1: 00000000: critical: -- CRASHED!!! --",
+        "2000-01-01T12:00:00+09:00: 1: 00000000: critical: ...trace",
+        "2000-01-01T12:00:00+09:00: 1: 00000000: critical: ----------------",
+        "Running queries:",
+        "2000-01-01T00:00:01+09:00:",
+        "load \\",
+        "  --table \"Data\"",
+        "Summary:",
+        "crashed:yes, unflushed:no, unfinished:yes, leak:no",
+        "NG: Please check the display and logs.",
+      ].join("\n") + "\n"
+      assert_equal([true, output],
+                   run_command(fixture_path("process", "crash.log"),
+                               fixture_path("query", "load", "unfinished.log")))
     end
 
     sub_test_case("load and flushed on crash") do
@@ -146,7 +175,7 @@ OUTPUT
         ].join("\n") + "\n"
         assert_equal([true, output],
                      run_command(fixture_path("process", "crash.log"),
-                                 fixture_path("query", "load-flushed", "with-target-name.log")))
+                                 fixture_path("query", "load", "flushed", "with-target-name.log")))
       end
 
       def test_only_opened
@@ -171,7 +200,7 @@ OUTPUT
         ].join("\n") + "\n"
         assert_equal([true, output],
                      run_command(fixture_path("process", "crash.log"),
-                                 fixture_path("query", "load-flushed", "only-opened.log")))
+                                 fixture_path("query", "load", "flushed", "only-opened.log")))
       end
     end
 
@@ -200,7 +229,7 @@ OUTPUT
         ].join("\n") + "\n"
         assert_equal([true, output],
                      run_command(fixture_path("process", "crash.log"),
-                                 fixture_path("query", "load-unflushed", "no-flush.log")))
+                                 fixture_path("query", "load", "unflushed", "no-flush.log")))
       end
 
       def test_only_opened
@@ -228,7 +257,7 @@ OUTPUT
         ].join("\n") + "\n"
         assert_equal([true, output],
                      run_command(fixture_path("process", "crash.log"),
-                                 fixture_path("query", "load-unflushed", "only-opened.log")))
+                                 fixture_path("query", "load", "unflushed", "only-opened.log")))
       end
     end
   end
