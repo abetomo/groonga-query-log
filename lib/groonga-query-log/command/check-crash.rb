@@ -140,9 +140,9 @@ module GroongaQueryLog
         def check
           summary = {
             crashed: false,
+            unflushed: false,
             unfinished: false,
             leak: false,
-            running_queries: false,
           }
           processes = ProcessEnumerator.new(@general_log_paths)
           processes.each do |process|
@@ -220,7 +220,7 @@ module GroongaQueryLog
                 @logger.info("#{statistic.start_time.iso8601}:")
                 @logger.info(statistic.command.to_command_format(pretty_print: true))
               end
-              summary[:running_queries] = true
+              summary[:unfinished] = true
             end
             unless @unflushed_statistics.empty?
               @logger.info("Unflushed commands in " +
@@ -228,7 +228,7 @@ module GroongaQueryLog
               @unflushed_statistics.each do |statistic|
                 @logger.info("#{statistic.start_time.iso8601}: #{statistic.raw_command}")
               end
-              summary[:unfinished] = true
+              summary[:unflushed] = true
             end
           end
           @logger.info("Summary:")
